@@ -5,11 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Particle Diagram Quiz — SpeedRun + Google Sheets Leaderboard</title>
   <style>
-    :root{
-      --bg:#0b1020; --panel:#101a36; --ink:#e8ecf8; --muted:#9aa6d1; --accent:#63b3ff;
-      --ok:#58e06c; --bad:#ff6b6b; --btn:#0b1430; --btn-border:#2c3f86; --btn-hover:#3a56b1;
-      --btn-correct:#124d24; --btn-incorrect:#5a1c1c; --btn-correct-border:#2f8f46; --btn-incorrect-border:#9e2a2a; --chip:#17224a;
-    }
+    :root{ --bg:#0b1020; --panel:#101a36; --ink:#e8ecf8; --muted:#9aa6d1; --accent:#63b3ff; --ok:#58e06c; --bad:#ff6b6b; --btn:#0b1430; --btn-border:#2c3f86; --btn-hover:#3a56b1; --btn-correct:#124d24; --btn-incorrect:#5a1c1c; --btn-correct-border:#2f8f46; --btn-incorrect-border:#9e2a2a; --chip:#17224a; }
     *{box-sizing:border-box} html,body{height:100%}
     body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:radial-gradient(1200px 600px at 20% -10%, #18275c 0%, transparent 60%),radial-gradient(900px 500px at 110% 10%, #1a2858 0%, transparent 65%),var(--bg);color:var(--ink);display:grid;grid-template-rows:auto auto 1fr auto;gap:12px;padding:14px}
     header{display:flex;align-items:center;gap:12px;justify-content:space-between}
@@ -81,42 +77,31 @@
   <div class="footer">Elemental molecule = two identical touching circles; compound = 2+ touching circles with ≥1 different colour. Same colour ⇒ same size within an image. Compounds use a consistent prototype & shape (linear/V) within each image; in “Mixture of compounds”, two distinct, internally consistent types may appear. Global spacing prevents unbonded atoms from appearing bonded.</div>
 
   <script>
-    // =============== CONFIG (set this once) =================
-    // Paste your Google Apps Script Web App URL (ends with /exec)
-    const REST_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzJ1bV2N7fWknCWHXaAOQgX6RuVhy9Q2yLyU6E-4Qb2wLNVrBGjjmJgSmFjQrpTd2gg/exec';
+    // ====== SET THIS to your Apps Script Web App URL (ends with /exec)
+    const REST_ENDPOINT = '';
 
-    // =============== Quiz internals =========================
+    // ====== Quiz internals (unchanged) ======
     const HIDDEN_COUNT=15, LOOSE_PACKING_PAD=28, GLOBAL_GAP_FACTOR=0.35;
-    const CATEGORIES=[
-      'Mixture of different elements','Mixture of an element and a compound','Mixture of compounds','Pure substance of an element','Pure substance of a compound'
-    ];
+    const CATEGORIES=['Mixture of different elements','Mixture of an element and a compound','Mixture of compounds','Pure substance of an element','Pure substance of a compound'];
     const STEP1=['Mixture','Pure substance'];
     const STEP2_MAP={ 'Mixture':['Mixture of different elements','Mixture of an element and a compound','Mixture of compounds'], 'Pure substance':['Pure substance of an element','Pure substance of a compound'] };
-
-    function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296}}
-    const rnd={ _rng:mulberry32(Math.floor(Math.random()*1e9)), next(){return this._rng();}, range(a,b){return a+(b-a)*this.next();}, int(a,b){return Math.floor(this.range(a,b+1));}, pick(arr){return arr[this.int(0,arr.length-1)]}, shuffle(arr){for(let i=arr.length-1;i>0;i--){const j=this.int(0,i);[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;} };
-
+    function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296}} const rnd={_rng:mulberry32(Math.floor(Math.random()*1e9)),next(){return this._rng();},range(a,b){return a+(b-a)*this.next();},int(a,b){return Math.floor(this.range(a,b+1));},pick(a){return a[this.int(0,a.length-1)]},shuffle(a){for(let i=a.length-1;i>0;i--){const j=this.int(0,i);[a[i],a[j]]=[a[j],a[i]];}return a;}};
     const canvas=document.getElementById('scene'); const ctx=canvas.getContext('2d');
     function resizeCanvas(){const wrap=canvas.parentElement.getBoundingClientRect();const m=16;canvas.width=Math.max(600,Math.floor(wrap.width)-m*2);canvas.height=Math.max(380,Math.floor(wrap.height)-m*2);} window.addEventListener('resize',()=>{resizeCanvas();});
     let placed=[]; let imageAnswer=null;
-
     const palette=['#ff6b6b','#6bc8ff','#7cff6b','#ffd56b','#c86bff','#6bffc8','#ff9df2','#a9ff6b','#ffb36b','#6b9bff','#9fffd0','#e0ff6b'];
     function makeColourSizes(meanR){const map=new Map();return function getSize(color){if(!map.has(color)){map.set(color,Math.max(4,meanR*(0.85+rnd.range(0,0.3))))}return map.get(color);}}
-
     function circlesTooClose(a,b){const dx=a.x-b.x,dy=a.y-b.y;const rr=(a.r+b.r)*(1+GLOBAL_GAP_FACTOR);return dx*dx+dy*dy<rr*rr-1e-3}
     function inBounds(x,y,r,w,h){return x-r>=4&&y-r>=4&&x+r<=w-4&&y+r<=h-4}
     function drawCircle(c){const {x,y,r,color}=c;const g=ctx.createRadialGradient(x-r*0.4,y-r*0.6,r*0.2,x,y,r);g.addColorStop(0,'#ffffff');g.addColorStop(0.05,color);g.addColorStop(1,color);ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='rgba(255,255,255,.25)';ctx.lineWidth=1;ctx.stroke();}
     function tryPlace(atoms,tries=600){const W=canvas.width,H=canvas.height,pad=LOOSE_PACKING_PAD;while(tries-->0){const ax=rnd.range(pad,W-pad),ay=rnd.range(pad,H-pad);const th=rnd.range(0,Math.PI*2),c=Math.cos(th),s=Math.sin(th);let ok=true;const abs=[];for(const a of atoms){const x=ax+(a.rel.x*c-a.rel.y*s),y=ay+(a.rel.x*s+a.rel.y*c);if(!inBounds(x,y,a.r,W,H)){ok=false;break;}for(const p of placed){if(circlesTooClose({x,y,r:a.r},{x:p.x,y:p.y,r:p.r})){ok=false;break;}}if(!ok)break;abs.push({x,y,r:a.r,color:a.color});}if(ok){abs.forEach(c=>{placed.push(c);drawCircle(c);});return true;}}return false}
-
     function atom(r,color){return {r,color,rel:{x:0,y:0}}}
     function buildMonatomic(meanR,getSize,color){return [atom(getSize(color),color)]}
     function buildDiatomic(meanR,getSize,color){const r=getSize(color);const a=atom(r,color),b=atom(r,color);b.rel={x:r+r,y:0};return [a,b]}
     function buildCompound(proto,meanR,getSize,A,B,shape){const mode=shape?.mode||'linear';const ANG=shape?.angle??Math.PI/12;if(proto==='AB'){const ra=getSize(A),rb=getSize(B);const a=atom(ra,A),b=atom(rb,B);b.rel={x:ra+rb,y:0};return [a,b];}if(proto==='AB2'){const ra=getSize(A),rb=getSize(B);const aC=atom(ra,A);const d=ra+rb;let b1,b2;if(mode==='linear'){b1=atom(rb,B);b1.rel={x:d,y:0};b2=atom(rb,B);b2.rel={x:-d,y:0};}else{const c=Math.cos(ANG),s=Math.sin(ANG);b1=atom(rb,B);b1.rel={x:d*c,y:d*s};b2=atom(rb,B);b2.rel={x:d*c,y:-d*s};}return [aC,b1,b2];}const ra=getSize(A),rb=getSize(B);const bC=atom(rb,B);const d=ra+rb;let a1,a2;if(mode==='linear'){a1=atom(ra,A);a1.rel={x:d,y:0};a2=atom(ra,A);a2.rel={x:-d,y:0};}else{const c=Math.cos(ANG),s=Math.sin(ANG);a1=atom(ra,A);a1.rel={x:d*c,y:d*s};a2=atom(ra,A);a2.rel={x:d*c,y:-d*s};}return [bC,a1,a2]}
-
     function generateScene(){resizeCanvas();ctx.clearRect(0,0,canvas.width,canvas.height);placed.length=0;const meanR=14;const colours=rnd.shuffle(palette.slice());const getSize=makeColourSizes(meanR);const category=rnd.pick(CATEGORIES);function placeMany(b,n){for(let i=0;i<n;i++){tryPlace(b());}}let remaining=HIDDEN_COUNT;if(category==='Mixture of different elements'){const nTypes=rnd.pick([2,3]);const split=Array(nTypes).fill(0).map(()=>1);for(let i=0;i<remaining-nTypes;i++){split[rnd.int(0,nTypes-1)]++;}for(let t=0;t<nTypes;t++){const color=colours[t];const di=rnd.next()<0.5;placeMany(()=>di?buildDiatomic(meanR,getSize,color):buildMonatomic(meanR,getSize,color),split[t]);}}else if(category==='Mixture of an element and a compound'){const colorE=colours[0];const [A,B]=[colours[1],colours[2]];const proto=rnd.pick(['AB','AB2','A2B']);const shape={mode:(rnd.next()<0.5?'linear':'v'),angle:rnd.range(Math.PI/16,Math.PI/6)};const nC=Math.floor(remaining*0.5);const nE=remaining-nC;const elDi=rnd.next()<0.5;placeMany(()=>elDi?buildDiatomic(meanR,getSize,colorE):buildMonatomic(meanR,getSize,colorE),nE);placeMany(()=>buildCompound(proto,meanR,getSize,A,B,shape),nC);}else if(category==='Mixture of compounds'){const [A,B,C,D]=colours.slice(0,4);let p1=rnd.pick(['AB','AB2','A2B']);let p2=rnd.pick(['AB','AB2','A2B']);if(p2===p1){p2=rnd.pick(['AB','AB2','A2B'].filter(p=>p!==p1));}const s1={mode:(rnd.next()<0.5?'linear':'v'),angle:rnd.range(Math.PI/16,Math.PI/6)};const s2={mode:(rnd.next()<0.5?'linear':'v'),angle:rnd.range(Math.PI/16,Math.PI/6)};const n1=Math.floor(remaining/2),n2=remaining-n1;placeMany(()=>buildCompound(p1,meanR,getSize,A,B,s1),n1);placeMany(()=>buildCompound(p2,meanR,getSize,C,D,s2),n2);}else if(category==='Pure substance of an element'){const color=colours[0];const di=rnd.next()<0.5;placeMany(()=>di?buildDiatomic(meanR,getSize,color):buildMonatomic(meanR,getSize,color),remaining);}else{const [A,B]=[colours[0],colours[1]];const proto=rnd.pick(['AB','AB2','A2B']);const shape={mode:(rnd.next()<0.5?'linear':'v'),angle:rnd.range(Math.PI/16,Math.PI/6)};placeMany(()=>buildCompound(proto,meanR,getSize,A,B,shape),remaining);}imageAnswer=category}
 
     let score=0, streak=0, step1WasCorrect=null; let runActive=false, runSeconds=60, runRemaining=60, runBest=0, runTimer=null;
-
     const statusEl=document.getElementById('status'); const answerHost=document.getElementById('answerHost'); const scoreChip=document.getElementById('scoreChip'); const streakChip=document.getElementById('streakChip'); const modeChip=document.getElementById('modeChip'); const timerChip=document.getElementById('timerChip'); const runBestChip=document.getElementById('runBestChip'); const playerChip=document.getElementById('playerChip');
     function setStatus(msg,cls){statusEl.className='status'+(cls?(' '+cls):'');statusEl.innerHTML=msg}
     function refreshScore(){scoreChip.textContent=`Score: ${score}`;streakChip.textContent=`Streak: ${streak}`}
@@ -128,12 +113,12 @@
     function toastHTML(html,sound=false,duration=1200){const t=document.createElement('div');t.innerHTML=html;t.style.position='fixed';t.style.left='50%';t.style.bottom='24px';t.style.transform='translateX(-50%)';t.style.padding='12px 16px';t.style.background='rgba(20,30,70,.95)';t.style.border='1px solid #3f60de';t.style.borderRadius='10px';t.style.color='#e8ecf8';t.style.zIndex=9999;t.style.maxWidth='90%';t.querySelectorAll('a').forEach(a=>{a.style.color='#a6d1ff';a.style.textDecoration='underline';a.target='_blank';a.rel='noopener noreferrer'});document.body.appendChild(t);if(sound)ringBell();setTimeout(()=>{t.style.transition='opacity .4s ease';t.style.opacity='0';setTimeout(()=>t.remove(),400)},duration);return t}
     function bigPop(msg){const overlay=document.createElement('div');overlay.style.position='fixed';overlay.style.inset='0';overlay.style.background='rgba(5,10,25,.75)';overlay.style.display='grid';overlay.style.placeItems='center';overlay.style.zIndex=10000;const box=document.createElement('div');box.style.background='#0f1733';box.style.border='1px solid #3f60de';box.style.borderRadius='16px';box.style.padding='28px 32px';box.style.color='#e8ecf8';box.style.textAlign='center';box.style.maxWidth='720px';box.style.margin='0 12px';const h=document.createElement('div');h.textContent=msg;h.style.fontSize='26px';h.style.fontWeight='800';h.style.letterSpacing='.3px';box.appendChild(h);const btn=document.createElement('button');btn.textContent='Close';btn.style.marginTop='16px';btn.style.padding='10px 14px';btn.style.background='#0b1430';btn.style.border='1px solid #3f60de';btn.style.borderRadius='10px';btn.style.color='#e8ecf8';btn.addEventListener('click',()=>overlay.remove());box.appendChild(btn);overlay.appendChild(box);document.body.appendChild(overlay);ringBell()}
 
-    // SpeedRun helpers
+    // ====== SpeedRun helpers ======
     function refreshRunChips(){timerChip.style.display=runActive?'inline-flex':'none';runBestChip.style.display=runActive?'inline-flex':'none';timerChip.textContent=`Time: ${runRemaining}s`;runBestChip.textContent=`Run Best: ${runBest}`}
-    function startRun(){const name=getPlayer();if(!name||name==='Guest'){toast('Set your nickname first!',true,1400);return;}runActive=true;runRemaining=runSeconds;runBest=0;streak=0;score=0;refreshScore();step1WasCorrect=null;modeChip.textContent='Mode: SpeedRun';document.getElementById('btnStartRun').style.display='none';document.getElementById('btnEndRun').style.display='inline-flex';refreshRunChips();setStatus('SpeedRun started — best streak in 60s wins!', 'ok');generateScene();renderAnswers();if(runTimer)clearInterval(runTimer);runTimer=setInterval(()=>{runRemaining-=1;if(runRemaining<=0){endRun();}else{refreshRunChips();}},1000)}
+    function startRun(){const name=getPlayer();if(!name||name==='Guest'){toast('Set your nickname first!',true,1400);return;}runActive=true;runRemaining=runSeconds;runBest=0;streak=0;score=0;refreshScore();step1WasCorrect=null;modeChip.textContent='Mode: SpeedRun';document.getElementById('btnStartRun').style.display='none';document.getElementById('btnEndRun').style.display='inline-flex';refreshRunChips();setStatus('SpeedRun started — best streak in 60s wins!','ok');generateScene();renderAnswers();if(runTimer)clearInterval(runTimer);runTimer=setInterval(()=>{runRemaining-=1;if(runRemaining<=0){endRun();}else{refreshRunChips();}},1000)}
     async function endRun(){if(!runActive)return;runActive=false;if(runTimer){clearInterval(runTimer);runTimer=null;}document.getElementById('btnStartRun').style.display='inline-flex';document.getElementById('btnEndRun').style.display='none';modeChip.textContent='Mode: Free Play';refreshRunChips();setStatus(`⏱️ Time! Your best streak this run: <strong>${runBest}</strong>`, '');await LB.submit(getPlayer(),runBest);await renderBoard()}
 
-    // Leaderboard backend (Google Sheets via Apps Script)
+    // ====== Leaderboard backend (Apps Script) ======
     const LS_PLAYER='pdq.player';
     function getPlayer(){return localStorage.getItem(LS_PLAYER)||'Guest'}
     function setPlayer(name){localStorage.setItem(LS_PLAYER,name);playerChip.textContent=`Player: ${name}`}
@@ -141,13 +126,19 @@
     const LB={
       async top5(){
         if(!REST_ENDPOINT){ return []; }
-        try{ const r=await fetch(REST_ENDPOINT+"?fn=top5"); return await r.json(); }
+        try{ const r=await fetch(REST_ENDPOINT+"?fn=top5", {cache:'no-store'}); return await r.json(); }
         catch(e){ console.warn('top5 failed', e); return []; }
       },
       async submit(name,score){
         if(!REST_ENDPOINT) return {ok:false};
-        try{ await fetch(REST_ENDPOINT, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fn:'submit', name, score}) }); }
-        catch(e){ console.warn('submit failed', e); }
+        try{
+          // Use a "simple" POST to avoid CORS preflight (Apps Script-friendly)
+          await fetch(REST_ENDPOINT, {
+            method:'POST',
+            headers:{ 'Content-Type':'text/plain' },
+            body: JSON.stringify({fn:'submit', name, score})
+          });
+        }catch(e){ console.warn('submit failed', e); }
         return {ok:true};
       }
     };
@@ -155,7 +146,7 @@
     async function renderBoard(){
       const list=document.getElementById('boardList');
       const items=await LB.top5();
-      if(!items||items.length===0){ list.innerHTML='<div class="status">Leaderboard empty (set up Google Sheet and paste the URL at the top).</div>'; return; }
+      if(!items||items.length===0){ list.innerHTML='<div class="status">No scores yet — start a 60s SpeedRun!</div>'; return; }
       const me=getPlayer(); list.innerHTML='';
       items.forEach((it,i)=>{ const row=document.createElement('div'); row.className='entry'+(it.name===me?' me':''); const left=document.createElement('div'); left.className='name'; left.textContent=`${i+1}. ${it.name}`; const right=document.createElement('div'); right.className='best'; right.textContent=it.best; row.appendChild(left); row.appendChild(right); list.appendChild(row); });
     }
@@ -183,58 +174,6 @@
     nickInput.value=getPlayer(); playerChip.textContent=`Player: ${getPlayer()}`; resizeCanvas(); renderAnswers(); refreshScore(); renderBoard();
   </script>
 
-  <!-- ===================== GOOGLE SHEETS BACKEND (step-by-step) =====================
-  1) Create a Google Sheet called "PDQ Leaderboard". In row 1 put headers exactly:
-       Name | Best
-
-  2) Extensions → Apps Script. Delete any code and paste the code below. Save.
-
-  function doGet(e) {
-    const sheet = SpreadsheetApp.getActive().getSheetByName('Sheet1');
-    const values = sheet.getRange(2,1,Math.max(0,sheet.getLastRow()-1),2).getValues();
-    const entries = values.filter(r => r[0]).map(r => ({ name: String(r[0]), best: Number(r[1])||0 }));
-    entries.sort((a,b)=> b.best - a.best || a.name.localeCompare(b.name));
-    return ContentService.createTextOutput(JSON.stringify(entries.slice(0,5)))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-
-  function doPost(e) {
-    const body = JSON.parse(e.postData.contents || '{}');
-    if (body.fn === 'submit') {
-      const name = String(body.name||'').slice(0,24);
-      const score = Number(body.score||0);
-      const sheet = SpreadsheetApp.getActive().getSheetByName('Sheet1');
-      const data = sheet.getDataRange().getValues();
-      let found = false;
-      for (let i=1;i<data.length;i++) {
-        if (String(data[i][0]) === name) {
-          const current = Number(data[i][1])||0;
-          if (score > current) sheet.getRange(i+1,2).setValue(score);
-          found = true; break;
-        }
-      }
-      if (!found) sheet.appendRow([name, score]);
-      return ContentService.createTextOutput(JSON.stringify({ ok:true }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    return ContentService.createTextOutput(JSON.stringify({ ok:false }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-
-  3) Deploy → New deployment → Type: Web app
-     - Execute as: Me
-     - Who has access: Anyone
-     - Click Deploy → Authorize → Allow. Copy the URL (ends with /exec)
-
-  4) Back in this HTML (near the top), paste the URL into:
-       const REST_ENDPOINT = 'https://script.google.com/macros/s/XXXXXXXXXXXX/exec';
-
-  5) Upload this single HTML file to GitHub Pages / LMS and share the link. Done.
-
-  Notes:
-  • The leaderboard stores only the best SpeedRun streak per nickname. Students need to click Start 60s SpeedRun and have a nickname set.
-  • To reset the board, clear rows under the header in your Sheet.
-  • You can rename the Sheet tab if you also change 'Sheet1' in the script.
-  ================================================================================ -->
+  <!-- Apps Script code lives in your Sheet project. Use the fixed version I gave you earlier. -->
 </body>
 </html>
